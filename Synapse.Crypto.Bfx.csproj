@@ -1,0 +1,19 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="NLog" Version="6.1.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Libs\Bitfinex\Bitfinex.Net\Bitfinex.Net.csproj" />
+    <ProjectReference Include="..\..\Synapse\Synapse.General\Synapse.General.csproj" />
+    <ProjectReference Include="..\Synapse.Crypto.Trading\Synapse.Crypto.Trading.csproj" />
+  </ItemGroup>
+
+</Project>

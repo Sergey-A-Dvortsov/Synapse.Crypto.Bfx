@@ -25,22 +25,6 @@ using System.Threading.Tasks;
 namespace Synapse.Crypto.Bfx
 {
 
-
-    //using Microsoft.Extensions.Hosting; // Если в ASP.NET Core, иначе уберите
-    //using Microsoft.Extensions.Logging;
-    //using System;
-    //using System.Collections.Concurrent;
-    //using System.Threading.Channels;
-    //using System.Threading.Tasks;
-
-    public class OrderBookUpdate
-    {
-        public string Symbol { get; init; } // Тикер акции (AAPL, GOOG и т.д.)
-        public string Data { get; init; }   // Пример: JSON с обновлением order book
-                                            // Добавьте другие поля по необходимости (bid/ask levels и т.д.)
-    }
-
-
     public class BookSubscription
     {
         public BookSubscription(string symbol, UpdateSubscription subscription)
@@ -52,7 +36,6 @@ namespace Synapse.Crypto.Bfx
         public BfxFastBook Book { get; private set; }
         public UpdateSubscription Subscription { get; set; }
     }
-
 
     public class BfxClient
     {

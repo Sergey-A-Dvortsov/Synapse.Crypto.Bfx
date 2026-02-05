@@ -19,7 +19,7 @@ namespace Synapse.Crypto.Bfx
         /// price and precision.</returns>
         /// <exception cref="ArgumentOutOfRangeException">Thrown if <paramref name="price"/> is less than or equal to zero, or if <paramref name="precision"/> is less
         /// than 1.</exception>
-        public static double GetTickSize(double price, int precision = 5)
+        public static double GetTickSize(this double price, int precision = 5)
         {
             //tickSize = 10 ^ (floor(log10(P)) - precision + 1)
             if (price <= 0)

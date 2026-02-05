@@ -17,7 +17,7 @@ namespace Synapse.Crypto.Bfx
 
         private readonly int decimals;
 
-        public BfxFastBook(string symbol, int decimals = 5) : base(symbol, double.NaN)
+        public BfxFastBook(InstrumentTypes type, string symbol, int decimals = 5) : base(type, symbol, double.NaN)
         {
             this.decimals = (int)decimals;
             logger = LogManager.GetLogger($"BfxFastBook.{symbol}");

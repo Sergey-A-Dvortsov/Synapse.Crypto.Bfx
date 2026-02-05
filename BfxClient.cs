@@ -27,9 +27,9 @@ namespace Synapse.Crypto.Bfx
 
     public class BookSubscription
     {
-        public BookSubscription(string symbol, UpdateSubscription subscription)
+        public BookSubscription(InstrumentTypes type, string symbol, UpdateSubscription subscription)
         {
-            Book = new BfxFastBook(symbol);
+            Book = new BfxFastBook(type, symbol);
             Subscription = subscription;
         }
 
@@ -79,7 +79,7 @@ namespace Synapse.Crypto.Bfx
 
         #region websoket
 
-        public async Task<UpdateSubscription> SubscribeToOrderBookAsync(string symbol, int depth = 25,
+        public async Task<UpdateSubscription> SubscribeToOrderBookAsync(InstrumentTypes type, string symbol, int depth = 25,
             Precision precision = Precision.PrecisionLevel0, Frequency frequency = Frequency.Realtime)
         {
 
@@ -91,7 +91,7 @@ namespace Synapse.Crypto.Bfx
                     {
                         if (e.UpdateType == SocketUpdateType.Snapshot)
                         {
-                            if(!FastBooks.TryAdd(e.Symbol, new(e.Symbol, null)))
+                            if(!FastBooks.TryAdd(e.Symbol, new(type, e.Symbol, null)))
                             {
                                 if (!FastBooks.ContainsKey(e.Symbol))
                                 {
@@ -122,7 +122,7 @@ namespace Synapse.Crypto.Bfx
             {
                 if (!FastBooks.ContainsKey(symbol))
                 {
-                    if(!FastBooks.TryAdd(symbol, new(symbol, bitfinsubscription.Data)))
+                    if(!FastBooks.TryAdd(symbol, new(type, symbol, bitfinsubscription.Data)))
                     {
                         if (FastBooks.ContainsKey(symbol))
                             FastBooks[symbol].Subscription = bitfinsubscription.Data;

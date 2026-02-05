@@ -124,7 +124,7 @@ namespace Synapse.Crypto.Bfx
                     {
                         if (e.UpdateType == SocketUpdateType.Snapshot)
                         {
-                            bookQueue = new BookUpdateTaskQueue();
+                            bookQueue = new();
                         }
                         else
                             throw new NullReferenceException(nameof(bookQueue));

@@ -6,12 +6,11 @@ using Synapse.Crypto.Trading;
 using Synapse.General;
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
 
 namespace Synapse.Crypto.Bfx
 {
+
     public class BfxFastBook : FastBook
     {
 
@@ -190,4 +189,147 @@ namespace Synapse.Crypto.Bfx
         //4.1 if amount = 1 then remove from bids
         //4.2 if amount = -1 then remove from asks
     }
+
+
+    public class BfxBook : OrderBook
+    {
+        private readonly int decimals;
+
+        public BfxBook(InstrumentTypes type, string symbol, int decimals = 5) : base(type, symbol)
+        {
+            this.decimals = (int)decimals;
+            logger = LogManager.GetLogger($"BfxFastBook.{symbol}");
+        }
+
+        private DateTime updateTime;
+        public DateTime UpdateTime => updateTime;
+
+        public bool Update(DataEvent<BitfinexOrderBookEntry[]> evnt)
+        {
+            updateTime = evnt.DataTime.GetValueOrDefault();
+            Delay = DateTime.UtcNow - UpdateTime;
+
+            if (evnt.UpdateType == SocketUpdateType.Snapshot)
+                return UpdateWithSnapshot(evnt);
+            else if (evnt.UpdateType == SocketUpdateType.Update)
+                return UpdateWithEntry(evnt);
+            return false;
+        }
+
+        /// <summary>
+        /// Полностью обновляет массивы Asks и Bids при помощи снапшота книги заявок.
+        /// </summary>
+        /// <param name="ss">Orderbook snapshot</param>
+        public bool UpdateWithSnapshot(DataEvent<BitfinexOrderBookEntry[]> evnt)
+        {
+            //var asks = evnt.Data.Where(e => e.Count > 0 && e.Quantity < 0).Select(e => new Quote((double)e.Price, (double)Math.Abs(e.Quantity))).ToArray();
+
+            var asks = evnt.Data.Where(e => e.Count > 0 && e.Quantity < 0).Select(e => new double[2]{(double)e.Price,(double)Math.Abs(e.Quantity)}).ToArray();
+            var bids = evnt.Data.Where(e => e.Count > 0 && e.Quantity > 0).Select(e => new double[2] {(double)e.Price,(double)Math.Abs(e.Quantity) }).ToArray();
+
+            //TODO сделать проверку на валидность данных в asks/bids. Если данные не валидны, то генерируем ошибку, выставляем Valid = false
+            Valid = false;
+
+            TickSize = asks[0][0].GetTickSize();
+            Decimals = TickSize.GetDecimals();
+
+            // Заполняем массивы Asks и Bids полученными котировками из снапшота
+            for (int i = 0; i < asks.Length; i++)
+            {
+                Asks.Add(asks[i][0], asks[i][1]);
+            }
+
+            for (int i = 0; i < bids.Length; i++)
+            {
+                Bids.Add(bids[i][0], bids[i][1]);
+            }
+
+            Valid = true;
+
+            return true;
+
+        }
+
+        /// <summary>
+        /// Обновляет массивы Asks и Bids при помощи измененных котировок .
+        /// </summary>
+        /// <param name="ss">Orderbook delta</param>
+        public bool UpdateWithEntry(DataEvent<BitfinexOrderBookEntry[]> evnt)
+        {
+
+            if (!Valid) throw new Exception("Снапшот не был получен или произошла ошибка при его обработке.");   
+                
+            var entries = evnt.Data;
+
+            try
+            {
+
+                //TODO сделать проверку на валидность данных в asks/bids. Если данные не валидны, то генерируем ошибку, выставляем Valid = false
+                Valid = true;
+
+                TickSize = ((double)entries[0].Price).GetTickSize();
+                Decimals = TickSize.GetDecimals();
+
+                for (int i = 0; i < entries.Length; i++)
+                {
+                    var side = entries[i].Quantity > 0 ? BookSides.Bid : BookSides.Ask;
+                    double size = entries[i].Quantity == 0 ? 0 : (double)Math.Abs(entries[i].Quantity);
+                    double price = (double)entries[i].Price;
+
+                    if (side == BookSides.Ask)
+                    {
+                        if(Asks.ContainsKey(price))
+                        {
+                            if (entries[i].Count == 0)
+                                Asks.Remove(price);
+                            else
+                                Asks[price] = size;
+                        }
+                        else
+                        {
+                            if (entries[i].Count != 0)
+                                Asks.Add(price, size);
+                        }
+                    }
+                    else if (side == BookSides.Bid)
+                    {
+                        if (Bids.ContainsKey(price))
+                        {
+                            if (entries[i].Count == 0)
+                                Bids.Remove(price);
+                            else
+                                Bids[price] = size;
+                        }
+                        else
+                        {
+                            if (entries[i].Count != 0)
+                                Bids.Add(price, size);
+                        }
+                    }
+                }
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                logger.ToError(ex);
+            }
+
+            return false;
+        }
+
+        //Algorithm to create and keep a trading book instance updated
+        //1. subscribe to channel
+        //2. receive the book snapshot and create your in-memory book structure
+        //when count > 0 then you have to add or update the price level
+        //3.1 if amount > 0 then add/update bids
+        //3.2 if amount< 0 then add/update asks
+        //when count = 0 then you have to delete the price level.
+        //4.1 if amount = 1 then remove from bids
+        //4.2 if amount = -1 then remove from as
+
+    }
+
+
+
 }

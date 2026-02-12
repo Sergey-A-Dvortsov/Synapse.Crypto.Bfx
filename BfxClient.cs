@@ -25,15 +25,27 @@ using System.Threading.Tasks;
 namespace Synapse.Crypto.Bfx
 {
 
-    public class BookSubscription
+    public class FastBookSubscription
     {
-        public BookSubscription(InstrumentTypes type, string symbol, UpdateSubscription subscription)
+        public FastBookSubscription(InstrumentTypes type, string symbol, UpdateSubscription subscription)
         {
             Book = new BfxFastBook(type, symbol);
             Subscription = subscription;
         }
 
         public BfxFastBook Book { get; private set; }
+        public UpdateSubscription Subscription { get; set; }
+    }
+
+    public class BookSubscription
+    {
+        public BookSubscription(InstrumentTypes type, string symbol, UpdateSubscription subscription)
+        {
+            Book = new BfxBook(type, symbol);
+            Subscription = subscription;
+        }
+
+        public BfxBook Book { get; private set; }
         public UpdateSubscription Subscription { get; set; }
     }
 
@@ -44,6 +56,10 @@ namespace Synapse.Crypto.Bfx
         //private ApiCredentials credencials;
         private readonly BitfinexSocketClient socket;
         private BookUpdateTaskQueue bookQueue;
+
+        private string booktype = "book";
+
+        private Logger logger = LogManager.GetCurrentClassLogger();
 
         public BfxClient()
         {
@@ -62,9 +78,21 @@ namespace Synapse.Crypto.Bfx
             FastBookUpdate?.Invoke(book);
         }
 
+        /// <summary>
+        /// Event of fastbook update
+        /// </summary>
+        public event Action<OrderBook> OrderBookUpdate = delegate { };
+
+        private void OnOrderBookUpdate(OrderBook book)
+        {
+            OrderBookUpdate?.Invoke(book);
+        }
+
         public static BfxClient Instance { get; private set; }
 
-        public Dictionary<string, BookSubscription> FastBooks = [];
+        public Dictionary<string, FastBookSubscription> FastBooks = [];
+
+        public ConcurrentDictionary<string, BookSubscription> Books = [];
 
         public string GetSymbol(string baseAsset, string quoteAsset, TradingMode mode)
         {
@@ -79,7 +107,7 @@ namespace Synapse.Crypto.Bfx
 
         #region websoket
 
-        public async Task<UpdateSubscription> SubscribeToOrderBookAsync(InstrumentTypes type, string symbol, int depth = 25,
+        public async Task<UpdateSubscription> SubscribeFastBookAsync(InstrumentTypes type, string symbol, int depth = 25,
             Precision precision = Precision.PrecisionLevel0, Frequency frequency = Frequency.Realtime)
         {
 
@@ -120,6 +148,8 @@ namespace Synapse.Crypto.Bfx
 
             if (bitfinsubscription.Success)
             {
+                booktype = "fast";
+
                 if (!FastBooks.ContainsKey(symbol))
                 {
                     if(!FastBooks.TryAdd(symbol, new(type, symbol, bitfinsubscription.Data)))
@@ -143,14 +173,114 @@ namespace Synapse.Crypto.Bfx
 
         }
 
+        public async Task<UpdateSubscription> SubscribeOrderBookAsync(InstrumentTypes type, string symbol, int depth = 25,
+           Precision precision = Precision.PrecisionLevel0, Frequency frequency = Frequency.Realtime)
+        {
+
+            try
+            {
+
+            var bitfinsubscription = await socket.SpotApi.SubscribeToOrderBookUpdatesAsync(symbol, precision, frequency, depth,
+                e =>
+                {
+
+                    if (!Books.ContainsKey(e.Symbol))
+                    {
+                        if (e.UpdateType == SocketUpdateType.Snapshot)
+                        {
+                            if (!Books.TryAdd(e.Symbol, new(type, e.Symbol, null)))
+                            {
+                                if (!Books.ContainsKey(e.Symbol))
+                                {
+                                    throw new ArgumentException($"Failed to add {e.Symbol} to Books.");
+                                }
+                            }
+                        }
+                        else
+                            throw new ArgumentException($"Books don't contains {e.Symbol}.");
+                    }
+
+                    if (bookQueue == null)
+                    {
+                        if (e.UpdateType == SocketUpdateType.Snapshot)
+                        {
+                            bookQueue = new();
+                        }
+                        else
+                            throw new NullReferenceException(nameof(bookQueue));
+
+                    }
+
+                    bookQueue.Enqueue(e, ProcessUpdate);
+
+                });
+
+            if (bitfinsubscription.Success)
+            {
+                booktype = "book";
+
+                if (!Books.ContainsKey(symbol))
+                {
+                    if (!Books.TryAdd(symbol, new(type, symbol, bitfinsubscription.Data)))
+                    {
+                        if (Books.ContainsKey(symbol))
+                            Books[symbol].Subscription = bitfinsubscription.Data;
+                    }
+                }
+                else if (Books[symbol].Subscription == null)
+                    Books[symbol].Subscription = bitfinsubscription.Data;
+
+                if (bookQueue == null)
+                    bookQueue = new BookUpdateTaskQueue();
+
+                return bitfinsubscription.Data;
+            }
+            else
+            {
+                throw new Exception($"Could not subscribe to {symbol} order book updates: {bitfinsubscription.Error}" );
+            }
+
+            }
+            catch (Exception ex)
+            {
+                logger.ToError(ex);
+            }
+
+            return null;
+
+        }
+
 
         /// Функция обработки (ваша логика обновления order book)
         async Task ProcessUpdate(DataEvent<BitfinexOrderBookEntry[]> update)
         {
             string symbol = update.Symbol;
 
-            if (FastBooks[symbol].Book.Update(update))
-                OnFastBookUpdate(FastBooks[symbol].Book);
+            if (booktype == "fast")
+            {
+                if (FastBooks[symbol].Book.Update(update))
+                    OnFastBookUpdate(FastBooks[symbol].Book);
+            }
+            else if (booktype == "book")
+            {
+
+                if (Books.TryGetValue(symbol, out BookSubscription subsc))
+                {
+                    if (subsc.Book.Update(update))
+                        OnOrderBookUpdate(subsc.Book);
+                }
+                else
+                {
+                    logger.Warn($"Не смог выполнить Update для {symbol}.");
+                }
+
+            }
+        }
+
+
+        public async Task UnsubscribeAllAsync()
+        {
+           await socket.UnsubscribeAllAsync();
         }
 
 
